@@ -16,12 +16,12 @@
 */
 
 bool directPortAccess = true;
-bool sendPattern = false;
+bool sendPattern = true;
 
 void setup() {
   pinMode(12, INPUT_PULLUP);
   pinMode(8, OUTPUT);
-  if (sendPattern) sendPattern();
+  if (sendPattern) pattern();
 }
 
 void loop() {
@@ -35,10 +35,10 @@ void sendPulse(int width){
     delayMicroseconds(width);
     if (directPortAccess) PORTB = B10000; // set 8 LOW and return 12 to HIGH
     else digitalWrite(8, LOW);
-    delayMicroseconds(width * 10); // long enough pause between pulses
+    delayMicroseconds(width * 50); // long enough pause between pulses
 }
 
-void sendPattern() {
+void pattern() {
 
   // test sending 100 100's
   for (int i = 0; i < 100; i++){
@@ -62,7 +62,7 @@ void sendPattern() {
 
   // test incrementing by 5 microseconds
   for (int i = 10; i < 5000; i = i + 5) {
-    sendPulse(i)
+    sendPulse(i);
   }
 }
 
