@@ -58,9 +58,7 @@ void setup() {
 
   digitalWrite(MOTORCONTROL1, LOW);
   digitalWrite(MOTORCONTROL2, LOW);
-  digitalWrite(EXTENDINGLED, LOW);
-  digitalWrite(RETRACTINGLED, LOW);
-  digitalWrite(ATPOSLED, LOW);
+  statusLEDs('x'); // turn off indicator LEDs to start
 }
 
 void loop() {
@@ -118,6 +116,12 @@ void statusLEDs(char in) {
       digitalWrite(ATPOSLED, LOW);
       break;
     case 'k':
+      digitalWrite(EXTENDINGLED, LOW);
+      digitalWrite(RETRACTINGLED, LOW);
+      digitalWrite(ATPOSLED, HIGH);
+      break;
+    case 'x':
+    default:
       digitalWrite(EXTENDINGLED, LOW);
       digitalWrite(RETRACTINGLED, LOW);
       digitalWrite(ATPOSLED, HIGH);
