@@ -12,6 +12,7 @@
     - fix for() loop limit by adding division by sizeof(unsigned long) to limit
     - Garth helped a lot with cleaning up the ISR
     - changed mode datatype to byte since it will usually be around 5 maximum
+    - added debug mode toggled by global boolean for serial feedback
 
    Robert Zacharias, rz@rzach.me
    released by the author to the public domain
@@ -19,7 +20,7 @@
 
 bool debug = true;
 
-const byte READPIN = 2; // do not change this casually; it needs to be an interrupt pin 
+const byte READPIN = 2; // do not change this casually; it needs to be an interrupt pin
 // and also the PIND port access bitmask below assumes this will be pin 2
 
 int FUZZ = 500; // number of microseconds to fudge on either side of pulse width result
@@ -37,24 +38,15 @@ void setup() {
 }
 
 void loop() {
-
   motorMode(mode);
-
-  if (debug) {
-    Serial.print("diff = ");
-    Serial.print(diff);
-    Serial.print("\tmotorMode = ");
-    Serial.println(mode);
-  }
-
 }
 
 void readPulse() {
   static unsigned long startTime = 0;
   static uint8_t lastState = 0; // state of the pin last time the interrupt was triggered
-  
+
   uint8_t readState = (PIND & (0b00000100)); // port access is quicker than digitalRead
-  
+
   if (readState != lastState) {
     if (readState) startTime = micros(); // if just went high, start timer
     else {
@@ -65,6 +57,12 @@ void readPulse() {
           mode = i;
           break; // no need to continue loop if it's already found a motorMode
         }
+      }
+      if (debug) {
+        Serial.print("diff = ");
+        Serial.print(diff);
+        Serial.print("\tmotorMode = ");
+        Serial.println(mode);
       }
     }
     lastState = readState;
