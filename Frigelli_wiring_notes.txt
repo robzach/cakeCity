@@ -1,0 +1,9 @@
+The Frigelli wiring diagram is partially wrong.
+
+Proper wiring of the position potentiometer:
+
+White to ground
+Blue to +5V
+Yellow is signal
+
+in this configuration the pot reads 0 or near 0 when retracted, and about 850 (out of 1023) when fully extended.

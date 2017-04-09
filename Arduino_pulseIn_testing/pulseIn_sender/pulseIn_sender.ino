@@ -10,9 +10,14 @@
    decreased pulse width by approx. 4 microseconds as compared
    with using digitalWrite commands.
 
+   4/5/17
+    - modified to send longer pulses, at 10, 20, 30 milliseconds
+      since those are the expected control pulse values for our project
+    - now using unsigned long data type for pulse width
+
    wire a switch from 12 to ground; close it to send a pulse
 
-   attach pin 8 to the other Arduino, and tie the grounds together
+   attach pin 8 to the other Arduino's input, and tie the grounds together
 */
 
 bool directPortAccess = true;
@@ -29,41 +34,32 @@ void loop() {
 }
 
 
-void sendPulse(int width){
+void sendPulse(unsigned long width){
    if (directPortAccess) PORTB = B1; // set 8 HIGH
     else digitalWrite(8, HIGH);
     delayMicroseconds(width);
     if (directPortAccess) PORTB = B10000; // set 8 LOW and return 12 to HIGH
     else digitalWrite(8, LOW);
-    delayMicroseconds(width * 50); // long enough pause between pulses
+    delayMicroseconds(10000); // millisecond pause between pulses
 }
 
 void pattern() {
 
-  // test sending 100 100's
+  // test sending 100 10000's
   for (int i = 0; i < 100; i++){
-    sendPulse(100);
+    sendPulse(10000);
   }
 
-  // test sending 100 500's
+  // test sending 100 20000's
   for (int i = 0; i < 100; i++){
-    sendPulse(500);
+    sendPulse(20000);
   }
 
-  // test sending 100 1000's
+  // test sending 100 30000's
   for (int i = 0; i < 100; i++){
-    sendPulse(1000);
+    sendPulse(30000);
   }
   
-  // test incrementing by single microseconds
-  for (int i = 10; i < 1000; i++) {
-    sendPulse(i);
-  }
-
-  // test incrementing by 5 microseconds
-  for (int i = 10; i < 5000; i = i + 5) {
-    sendPulse(i);
-  }
 }
 
 
