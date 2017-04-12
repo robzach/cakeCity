@@ -1,6 +1,10 @@
 /*
     Driving the linear actuator to a position command sent via serial monitor
 
+    4-12-17
+      - added - and = serial commands to decrement and increment by one step
+      - still haven't finished analogRead smoothing function
+
     4-10-17
     It was likely an electrical fault in the on-board voltage regulator on the Nano, though
     I also had switched the wiring assignments of motor pin A and B (that itself wasn't
@@ -39,7 +43,7 @@ void loop() {
 }
 
 void motorMove() {
-  int pos = analogRead(POSREADPN);
+  int pos = analogRead(POSREADPIN);
 //  pos += int(0.5 * analogRead(POSREADPIN)); beginning of exponential decay smoothing?
   int PWMsignal = map(abs(pos - posCommand), 0, 900, PWMMIN, PWMMAX);
   
@@ -62,7 +66,15 @@ void motorMove() {
 
 void serialEvent() {
   while (Serial.available()) {
-    posCommand = Serial.parseInt();
+    if(Serial.peek() == '-'){
+      Serial.read();
+      posCommand --;
+    }
+    else if (Serial.peek() == '='){
+      Serial.read();
+      posCommand ++;
+    }
+    else posCommand = Serial.parseInt();
     Serial.print("posCommand = ");
     Serial.print(posCommand);
     Serial.print("\tPOSREADPIN value = ");
