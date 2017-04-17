@@ -1,0 +1,17 @@
+Garth Zeglin's advice about how to build a basic linear state estimator with derivatives.
+
+We'll attemtpt to integrate this into our speed control scheme.
+
+Quoting Garth:
+
+  // Perform basic input filtering to estimate the derivative and
+  // reduce noise.  Apply a derivative estimator:
+  //   q_err  =  calib - q
+  //   q     +=  qd * dt + lq  * q_err * dt
+  //   qd    +=            lqd * q_err * dt;
+
+  float q_err    = s->calib - s->q;
+  float q_err_dt = q_err * model->dt;
+
+  s->q  +=  s->qd * model->dt + s->lq * q_err_dt;
+  s->qd +=  s->lqd * q_err_dt;
