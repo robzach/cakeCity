@@ -9,6 +9,8 @@
         (these are meant to imitate the style of robot command we expect the device to receive, though
         that command will be received and interpreted via pulse width signals via the ABB digital out)
         they are not really working right yet; they move the motor but not at a slow speed
+      later
+      - added motor off command for proper speed control
 
     4-12-17
       - added - and = serial commands to decrement and increment by one step
@@ -146,17 +148,25 @@ void motorMoveSpeed() {
 
   switch (speedCommand) {
     case 'e':
-      if (rate < 0.0001) {
+      if (rate < 0.001) {
         digitalWrite(MOTORPINA, HIGH);
+        digitalWrite(MOTORPINB, LOW);
+      }
+      else {
+        digitalWrite(MOTORPINA, LOW);
         digitalWrite(MOTORPINB, LOW);
       }
       break;
     case 'r':
-      if (rate > -0.0001) {
+      if (rate > -0.001) {
         digitalWrite(MOTORPINA, LOW);
         digitalWrite(MOTORPINB, HIGH);
-        break;
       }
+      else {
+        digitalWrite(MOTORPINA, LOW);
+        digitalWrite(MOTORPINB, LOW);
+      }
+      break;
     case 's':
     default:
       digitalWrite(MOTORPINA, LOW);
