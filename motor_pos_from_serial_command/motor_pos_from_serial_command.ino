@@ -1,6 +1,9 @@
 /*
     Driving the linear actuator according to a position or speed command sent via serial monitor
 
+    4-19-17
+      - simplified motorMoveSpeed to be a simple event-loop stepper
+    
     4-17-18
       - added jog pushbuttons
       - added global position constraints
@@ -41,16 +44,6 @@ const int POSREADPIN = A0;
 const int JOGEXTEND = 10;
 const int JOGRETRACT = 8;
 
-/*not the right way to declare this
-  struct s {
-  float calib;
-  float q;
-  float qd;
-  float lq;
-  float lqd;
-  };
-*/
-
 const int MAXPOS = 850; // found empirically on this device; approx. 8" of extension
 const int MINPOS = 10;  // found empirically; fully retracted
 const int PWMMIN = 32;
@@ -73,15 +66,6 @@ void setup() {
 }
 
 void loop() {
-
-  /* not the right way to implement the derivative estimator
-    float q_err    = s->calib - s->q;
-    float q_err_dt = q_err * model->dt;
-
-    s->q  +=  s->qd * model->dt + s->lq * q_err_dt;
-    s->qd +=  s->lqd * q_err_dt;
-  */
-
   switch (mode) {
     case 1: // motorMovePos
       motorMovePos();
@@ -136,21 +120,16 @@ void motorMovePos() {
 }
 
 void motorMoveSpeed() {
-  // rate = dist / time
-  // rate = analogRead units / milliseconds
-  // rate goal = approx 1 mm/second = approx 1 analogRead unit/second = approx 1 analogRead unit/1000ms = approx 0.001
 
-  int pos = analogRead(POSREADPIN);
-  long posTime = millis();
-  static int lastPos;
-  static unsigned long lastPosTime;
-  float rate = (pos - lastPos) / (posTime - lastPosTime);
-
+  int travelWait = 50;  // millisecond wait between steps
+  static unsigned long lastMoveTime = 0;
+  
   switch (speedCommand) {
     case 'e':
-      if (rate < 0.001) {
+      if (millis() - lastMoveTime > travelWait) {
         digitalWrite(MOTORPINA, HIGH);
         digitalWrite(MOTORPINB, LOW);
+        lastMoveTime = millis();
       }
       else {
         digitalWrite(MOTORPINA, LOW);
@@ -158,9 +137,10 @@ void motorMoveSpeed() {
       }
       break;
     case 'r':
-      if (rate > -0.001) {
+      if (millis() - lastMoveTime > travelWait) {
         digitalWrite(MOTORPINA, LOW);
         digitalWrite(MOTORPINB, HIGH);
+        lastMoveTime = millis();
       }
       else {
         digitalWrite(MOTORPINA, LOW);
@@ -172,10 +152,6 @@ void motorMoveSpeed() {
       digitalWrite(MOTORPINA, LOW);
       digitalWrite(MOTORPINB, LOW);
   }
-
-  lastPos = pos;
-  lastPosTime = posTime;
-
 }
 
 void serialEvent() {
