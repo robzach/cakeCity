@@ -21,21 +21,26 @@
            pot feedback governs motor speed through feedback
            (but jog buttons run at non-feedback speed)
            multiple extend-speed commands to be read (fast, med, slow?)
+    5-25-17
+       changed expected pulse lengths to 10, 20, 30 milliseconds
+       changed motor pin assignments to current wiring
+       added PWM pin, though not using for speed control yet
 
    Robert Zacharias
    released to the public domain by the author
 */
 
 // timing variables
-const int STOPPULSE = 2000; // two millisecond (2000 uS) pulse is stop command
+const int STOPPULSE = 10000; // two millisecond (2000 uS) pulse is stop command
 const int EXTENDPULSE = 4000; // four millisecond (4000 uS) pulse is extend command
-const int RETRACTPULSE = 6000; // six millisecond (6000 uS) pulse is retract command
+const int RETRACTPULSE = 20000; // six millisecond (6000 uS) pulse is retract command
 const int PULSEFUZZ = 200; // microseconds of permissible slop in pulse signal
 const int INDICATORWAIT = 500; // number of milliseconds LED should stay lit after pulse received
 
 // output pins
-const int MOTORCONTROL1 = 5; // if driven positive, will extend linear actuator
+const int MOTORCONTROL1 = 4; // if driven positive, will extend linear actuator
 const int MOTORCONTROL2 = 6; // if driven positive, will retract linear actuator
+const int PWMPIN = 3;
 const int EXTENDINGLED = 9;
 const int RETRACTINGLED = 10;
 const int ATPOSLED = 13;
@@ -57,11 +62,14 @@ void setup() {
   // output pins
   pinMode(MOTORCONTROL1, OUTPUT);
   pinMode(MOTORCONTROL2, OUTPUT);
+  pinMode(PWMPIN, OUTPUT);
   pinMode(EXTENDINGLED, OUTPUT);
   pinMode(RETRACTINGLED, OUTPUT);
   pinMode(ATPOSLED, OUTPUT);
   pinMode(PULSERECEIVELED, OUTPUT);
   pinMode(ESTOPLED, OUTPUT);
+
+  digitalWrite(PWMPIN, HIGH);
 
   // input pins
   pinMode(SIGNALPIN, INPUT);
@@ -79,8 +87,8 @@ void setup() {
 
 void loop() {
   driveMotor(mode);
-  if (digitalRead(EXTENDBUTTON == LOW) mode = 'e'; // jog extend
-  if (digitalRead(RETRACTBUTTON == LOW) mode = 'r'; // jog retract
+  if (digitalRead(EXTENDBUTTON == LOW)) mode = 'e'; // jog extend
+  if (digitalRead(RETRACTBUTTON == LOW)) mode = 'r'; // jog retract
   digitalWrite(PULSERECEIVELED, ((millis() - timer) < INDICATORWAIT));
 }
 
