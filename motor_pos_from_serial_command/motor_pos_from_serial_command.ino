@@ -1,6 +1,9 @@
 /*
     Driving the linear actuator according to a position or speed command sent via serial monitor
 
+    5-26-17
+      - changed pin assignment to match current wiring
+    
     4-19-17
       - simplified motorMoveSpeed to be a simple event-loop stepper
     
@@ -38,7 +41,7 @@
 
 
 const int MOTORPINA = 4;
-const int MOTORPINB = 2;
+const int MOTORPINB = 6;
 const int PWMPIN = 3;
 const int POSREADPIN = A0;
 const int JOGEXTEND = 10;
