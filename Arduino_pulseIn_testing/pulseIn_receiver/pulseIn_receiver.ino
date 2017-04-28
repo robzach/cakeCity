@@ -1,5 +1,5 @@
 /*
-   Read input data from digital output line in ABB robot
+   Read input data from digital output line in ABB robot and move linear actuator
 
    3/30/17 revising to explicitly use interrupts since some of the data
    coming through testing with Josh Bard on the robot was questionable.
@@ -14,6 +14,15 @@
     - changed mode datatype to byte since it will usually be around 5 maximum
     - added debug mode toggled by global boolean for serial feedback
 
+   5/26/17
+    - changed pin assignments to match motor driver as wired
+    - added motor motion commands
+
+   5/27/17
+    - added different retract speeds for testing with icing on the robot (using PWM)
+    - added serial input for debugging, and initialization message listing commands for user
+    - tried adding non-PWM speed control but it's not steady
+
    Robert Zacharias, rz@rzach.me
    released by the author to the public domain
 */
@@ -23,18 +32,31 @@ bool debug = true;
 const byte READPIN = 2; // do not change this casually; it needs to be an interrupt pin
 // and also the PIND port access bitmask below assumes this will be pin 2
 
-int FUZZ = 500; // number of microseconds to fudge on either side of pulse width result
+int FUZZ = 1000; // number of microseconds to fudge on either side of pulse width result
 volatile unsigned long diff; // volatile because it will be affected by the ISR
 volatile byte mode = 0; // global to drive motorMode (will be set by ISR)
 
 // target pulse width in microseconds of to-be-defined commands. Array length can be changed,
 // but check that motorMode reasonably matches
-unsigned long COMMAND[] = {10000, 20000, 30000, 40000};
+unsigned long COMMAND[] = {10000, 20000, 30000, 40000, 50000, 60000};
+int COMMANDLENGTH = sizeof(COMMAND) / sizeof(unsigned long);
+
+const int MOTORPINA = 4;
+const int MOTORPINB = 6;
+const int PWMPIN = 3;
+const int POSPIN = A0;
+
+String INITIALIZATIONMESSAGE = "\nAvailable serial commands: \n\t0 through n will set the motor to the correlating mode as defined in motorMode switch case\n\ts stops the motor\n\te extends the motor\n\tr retracts the motor\n\n";
 
 void setup() {
   pinMode(READPIN, INPUT);
   attachInterrupt(digitalPinToInterrupt(READPIN), readPulse, CHANGE);
   Serial.begin(115200);
+  pinMode(MOTORPINA, OUTPUT);
+  pinMode(MOTORPINB, OUTPUT);
+  pinMode(PWMPIN, OUTPUT);
+  digitalWrite(PWMPIN, HIGH);
+  Serial.println(INITIALIZATIONMESSAGE);
 }
 
 void loop() {
@@ -52,14 +74,14 @@ void readPulse() {
     else {
       diff = micros() - startTime; // if just went low, stop timer and count difference
       // drive motor based on pulse read
-      for (int i = 0; i < sizeof(COMMAND) / sizeof(unsigned long); i++) {
+      for (int i = 0; i < COMMANDLENGTH; i++) {
         if ( abs(diff - COMMAND[i]) < FUZZ ) {
           mode = i;
           break; // no need to continue loop if it's already found a motorMode
         }
       }
       if (debug) {
-        Serial.print("diff = ");
+        Serial.print("pulse width received = ");
         Serial.print(diff);
         Serial.print("\tmotorMode = ");
         Serial.println(mode);
@@ -69,23 +91,149 @@ void readPulse() {
   }
 }
 
-void motorMode(byte in) {
+void motorMode(byte in) { // new version, using timer and position feedback to change speed
+
+  int travelWait = 50;  // millisecond wait between steps
+  static unsigned long lastMoveTime = 0;
+  int pos = analogRead(POSPIN);
+  digitalWrite(PWMPIN, HIGH);
+
   switch (in) {
-    case 0:
-      // drive motor in some way
+    case 0: // stop
+      off();
       break;
-    case 1:
-      // drive motor in some way
+    case 1: // full speed retract
+      retract();
       break;
-    case 2:
-      // drive motor in some way
+    case 2: // full speed extend
+      extend();
       break;
-    case 3:
-      // drive motor in some way
+    case 3: // rate-based retract (not working steadily)
+      {
+        if (millis() - lastMoveTime > travelWait) {
+          int posGoal = pos - 1;
+          while (pos > posGoal) {
+            retract();
+            pos = analogRead(POSPIN);
+          }
+          off();
+          lastMoveTime = millis();
+        }
+        else off();
+        break;
+      }
+    case 4: // quarter speed retract
+      analogWrite(PWMPIN, 64);
+      retract();
       break;
-    default:
-      // stop motor
+    case 5: // eighth speed retract
+      analogWrite(PWMPIN, 32);
+      retract();
+      break;
+    default: // stop motor
+      off();
       break;
   }
 }
+
+void off() {
+  digitalWrite(MOTORPINA, LOW);
+  digitalWrite(MOTORPINB, LOW);
+}
+
+void extend() {
+  digitalWrite(MOTORPINA, HIGH);
+  digitalWrite(MOTORPINB, LOW);
+}
+
+void retract() {
+  digitalWrite(MOTORPINA, LOW);
+  digitalWrite(MOTORPINB, HIGH);  
+}
+
+void serialEvent() {
+  while (Serial.available()) {
+
+    int in = Serial.read();
+
+    // read numerical value if that's what's transmitted
+    for (int i = 0; i < COMMANDLENGTH; i++) {
+      int val = in - 48; // 48 is the value of '0' in ascii
+      if (val == i) {
+        mode = val;
+        Serial.print("received serial command: "); Serial.println(val);
+      }
+    }
+
+    // read letter command if that's what's transmitted
+    if (in == 's') { // stop
+      mode = 0;
+      Serial.println("received serial command 's' for stop");
+    }
+    else if (in == 'e') { // extend
+      mode = 2;
+      Serial.println("received serial command 'e' for extend");
+    }
+    else if (in == 'r') { // retract
+      mode = 1;
+      Serial.println("received serial command 'r' for retract");
+    }
+  }
+}
+
+
+/*
+  void motorMode(byte in) { // old version, using PWM to change speed
+  switch (in) {
+    case 0: // stop
+      digitalWrite(MOTORPINA, LOW);
+      digitalWrite(MOTORPINB, LOW);
+      break;
+    case 1: // full speed retract
+      analogWrite(PWMPIN, 255);
+      digitalWrite(MOTORPINA, LOW);
+      digitalWrite(MOTORPINB, HIGH);
+      break;
+    case 2: // full speed extend
+      analogWrite(PWMPIN, 255);
+      digitalWrite(MOTORPINA, HIGH);
+      digitalWrite(MOTORPINB, LOW);
+      break;
+    case 3: // half speed retract
+      analogWrite(PWMPIN, 128);
+      digitalWrite(MOTORPINA, LOW);
+      digitalWrite(MOTORPINB, HIGH);
+      break;
+    case 4: // quarter speed retract
+      analogWrite(PWMPIN, 64);
+      digitalWrite(MOTORPINA, LOW);
+      digitalWrite(MOTORPINB, HIGH);
+      break;
+    case 5: // eighth speed retract
+      analogWrite(PWMPIN, 32);
+      digitalWrite(MOTORPINA, LOW);
+      digitalWrite(MOTORPINB, HIGH);
+      break;
+    default: // stop motor
+      digitalWrite(MOTORPINA, LOW);
+      digitalWrite(MOTORPINB, LOW);
+      break;
+  }
+  }
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
