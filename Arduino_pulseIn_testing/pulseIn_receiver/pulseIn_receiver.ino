@@ -1,5 +1,5 @@
 /*
-   Read input data from digital output line in ABB robot and move linear actuator
+   Read input data from digital output line in ABB robot and move linear actuator accordingly
 
    3/30/17 revising to explicitly use interrupts since some of the data
    coming through testing with Josh Bard on the robot was questionable.
@@ -22,6 +22,12 @@
     - added different retract speeds for testing with icing on the robot (using PWM)
     - added serial input for debugging, and initialization message listing commands for user
     - tried adding non-PWM speed control but it's not steady
+
+   5/28/17
+    - added exponentially decaying analogRead-smoothing function, smoothedPos()
+    - tried to add function to run a lower speed, but it doesn't run consistently (mode 3 below);
+        it seems to place a heavy current demand on the power supply, which conks out for a second
+        or so during the drive, leading to movement in fits and starts
 
    Robert Zacharias, rz@rzach.me
    released by the author to the public domain
@@ -61,6 +67,7 @@ void setup() {
 
 void loop() {
   motorMode(mode);
+//  Serial.print("smoothed pos ");Serial.println(smoothedPos());
 }
 
 void readPulse() {
@@ -91,11 +98,11 @@ void readPulse() {
   }
 }
 
-void motorMode(byte in) { // new version, using timer and position feedback to change speed
+void motorMode(byte in) { // new version, using timer and position feedback to change speed (not stable)
 
-  int travelWait = 50;  // millisecond wait between steps
+  int travelWait = 10;  // millisecond wait between steps
   static unsigned long lastMoveTime = 0;
-  int pos = analogRead(POSPIN);
+  float pos = smoothedPos();
   digitalWrite(PWMPIN, HIGH);
 
   switch (in) {
@@ -108,13 +115,15 @@ void motorMode(byte in) { // new version, using timer and position feedback to c
     case 2: // full speed extend
       extend();
       break;
-    case 3: // rate-based retract (not working steadily)
+    case 3: // rate-based retract (not moving slowly enough)
       {
         if (millis() - lastMoveTime > travelWait) {
-          int posGoal = pos - 1;
+          float posGoal = pos - 0.025; // lowering this value doesn't seem to effectively lower the speed of travel by much
           while (pos > posGoal) {
+            analogWrite(PWMPIN, 128); // trying to slow down the travel a bit
             retract();
-            pos = analogRead(POSPIN);
+            pos = smoothedPos();
+//            Serial.print("pos, posGoal: ");Serial.print(pos); Serial.print("  "); Serial.println(posGoal);
           }
           off();
           lastMoveTime = millis();
@@ -122,11 +131,11 @@ void motorMode(byte in) { // new version, using timer and position feedback to c
         else off();
         break;
       }
-    case 4: // quarter speed retract
+    case 4: // quarter speed retract using PWM
       analogWrite(PWMPIN, 64);
       retract();
       break;
-    case 5: // eighth speed retract
+    case 5: // eighth speed retract using PWM
       analogWrite(PWMPIN, 32);
       retract();
       break;
@@ -162,6 +171,7 @@ void serialEvent() {
       if (val == i) {
         mode = val;
         Serial.print("received serial command: "); Serial.println(val);
+        break; // no need to finish loop if a match is found
       }
     }
 
@@ -180,6 +190,21 @@ void serialEvent() {
     }
   }
 }
+
+float smoothedPos(){
+  static float smooth = (float)analogRead(POSPIN);
+  float decay = 0.2;
+  float reading = (float)analogRead(POSPIN);
+  smooth = (smooth * (1 - decay)) + (reading * decay);
+  return smooth;
+}
+
+
+
+
+
+
+
 
 
 /*
