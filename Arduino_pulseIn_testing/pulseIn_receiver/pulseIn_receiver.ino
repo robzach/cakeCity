@@ -14,20 +14,26 @@
     - changed mode datatype to byte since it will usually be around 5 maximum
     - added debug mode toggled by global boolean for serial feedback
 
-   5/26/17
+   4/26/17
     - changed pin assignments to match motor driver as wired
     - added motor motion commands
 
-   5/27/17
+   4/27/17
     - added different retract speeds for testing with icing on the robot (using PWM)
     - added serial input for debugging, and initialization message listing commands for user
     - tried adding non-PWM speed control but it's not steady
 
-   5/28/17
+   4/28/17
     - added exponentially decaying analogRead-smoothing function, smoothedPos()
     - tried to add function to run a lower speed, but it doesn't run consistently (mode 3 below);
         it seems to place a heavy current demand on the power supply, which conks out for a second
         or so during the drive, leading to movement in fits and starts
+
+   5/1/17 Mayday! in more ways than one
+    - fixed previous three dates which were off by a month
+    - using motor_pos_from_serial_command as template for movement because it works reliably
+    - main loop runs at 100 Hz
+    - added jog buttons though they're not yet tested
 
    Robert Zacharias, rz@rzach.me
    released by the author to the public domain
@@ -51,23 +57,59 @@ const int MOTORPINA = 4;
 const int MOTORPINB = 6;
 const int PWMPIN = 3;
 const int POSPIN = A0;
+const int JOGEXTEND = 10;
+const int JOGRETRACT = 8;
+
+const int PWMMIN = 32;
+const int PWMMAX = 128;
+const int MAXPOS = 850; // found empirically on this device; approx. 8" of extension
+const int MINPOS = 12;  // found empirically; fully retractede
+
+
+float posCommand = MAXPOS; // variable to store movement command; defaults to fully extended
 
 String INITIALIZATIONMESSAGE = "\nAvailable serial commands: \n\t0 through n will set the motor to the correlating mode as defined in motorMode switch case\n\ts stops the motor\n\te extends the motor\n\tr retracts the motor\n\n";
 
 void setup() {
   pinMode(READPIN, INPUT);
   attachInterrupt(digitalPinToInterrupt(READPIN), readPulse, CHANGE);
+  posCommand = analogRead(POSPIN); // initialize value appropriately
   Serial.begin(115200);
   pinMode(MOTORPINA, OUTPUT);
   pinMode(MOTORPINB, OUTPUT);
   pinMode(PWMPIN, OUTPUT);
   digitalWrite(PWMPIN, HIGH);
+  pinMode(JOGEXTEND, INPUT_PULLUP);
+  pinMode(JOGRETRACT, INPUT_PULLUP);
   Serial.println(INITIALIZATIONMESSAGE);
 }
 
 void loop() {
-  motorMode(mode);
-//  Serial.print("smoothed pos ");Serial.println(smoothedPos());
+  static unsigned long loopTime = 0;
+  int wait = 10; // milliseconds between loops
+  if (millis() - loopTime > wait) {
+    motorMode(mode);
+    loopTime = millis();
+  }
+
+  static bool wasJustJogging = false;
+
+  while (digitalRead(JOGEXTEND) == LOW) {
+    analogWrite(PWMPIN, 64);
+    extend();
+    Serial.print("jog extend command to "); Serial.println(posCommand);
+    wasJustJogging = true;
+  }
+  while (digitalRead(JOGRETRACT) == LOW) {
+    analogWrite(PWMPIN, 64);
+    retract();
+    Serial.print("jog retract command to "); Serial.println(posCommand);
+    wasJustJogging = true;
+  }
+  if(wasJustJogging){
+    off();
+    wasJustJogging = false;
+  }
 }
 
 void readPulse() {
@@ -98,11 +140,12 @@ void readPulse() {
   }
 }
 
-void motorMode(byte in) { // new version, using timer and position feedback to change speed (not stable)
+void motorMode(byte in) { // based off of motor_pos_from_serial_command sketch
 
-  int travelWait = 10;  // millisecond wait between steps
   static unsigned long lastMoveTime = 0;
   float pos = smoothedPos();
+  int PWMsignal = constrain(map(abs(pos - posCommand), 0, 50, PWMMIN, PWMMAX), PWMMIN, PWMMAX);
+
   digitalWrite(PWMPIN, HIGH);
 
   switch (in) {
@@ -111,24 +154,41 @@ void motorMode(byte in) { // new version, using timer and position feedback to c
       break;
     case 1: // full speed retract
       retract();
+      posCommand = pos; // update for starting point of rate-based retract
       break;
     case 2: // full speed extend
       extend();
+      posCommand = pos; // update for starting point of rate-based retract
       break;
-    case 3: // rate-based retract (not moving slowly enough)
+    case 3: // rate-based retract
+      //    5/1/17 took 4:20 to run full length of empty extruder @ travelWait 200 and retractVal 0.5
       {
+        int travelWait = 200;   // millisecond wait between steps
+        float retractVal = 0.5; // decrement amount
         if (millis() - lastMoveTime > travelWait) {
-          float posGoal = pos - 0.025; // lowering this value doesn't seem to effectively lower the speed of travel by much
-          while (pos > posGoal) {
-            analogWrite(PWMPIN, 128); // trying to slow down the travel a bit
-            retract();
-            pos = smoothedPos();
-//            Serial.print("pos, posGoal: ");Serial.print(pos); Serial.print("  "); Serial.println(posGoal);
-          }
-          off();
+          posCommand -= retractVal;
+          if (posCommand < MINPOS) posCommand = MINPOS;
           lastMoveTime = millis();
         }
+        if (posCommand < pos) {
+          analogWrite(PWMPIN, PWMsignal);
+          retract();
+        }
         else off();
+
+        if (debug) {
+          Serial.print("posCommand = ");
+          Serial.print(posCommand);
+          Serial.print("\tpos = ");
+          Serial.print(pos);
+          Serial.print("\tMOTORPINA = ");
+          Serial.print(digitalRead(MOTORPINA));
+          Serial.print("\tMOTORPINB = ");
+          Serial.print(digitalRead(MOTORPINB));
+          Serial.print("\tPWMsignal = ");
+          Serial.println(PWMsignal);
+        }
+
         break;
       }
     case 4: // quarter speed retract using PWM
@@ -157,7 +217,7 @@ void extend() {
 
 void retract() {
   digitalWrite(MOTORPINA, LOW);
-  digitalWrite(MOTORPINB, HIGH);  
+  digitalWrite(MOTORPINB, HIGH);
 }
 
 void serialEvent() {
@@ -191,66 +251,13 @@ void serialEvent() {
   }
 }
 
-float smoothedPos(){
+float smoothedPos() {
   static float smooth = (float)analogRead(POSPIN);
   float decay = 0.2;
   float reading = (float)analogRead(POSPIN);
   smooth = (smooth * (1 - decay)) + (reading * decay);
   return smooth;
 }
-
-
-
-
-
-
-
-
-
-/*
-  void motorMode(byte in) { // old version, using PWM to change speed
-  switch (in) {
-    case 0: // stop
-      digitalWrite(MOTORPINA, LOW);
-      digitalWrite(MOTORPINB, LOW);
-      break;
-    case 1: // full speed retract
-      analogWrite(PWMPIN, 255);
-      digitalWrite(MOTORPINA, LOW);
-      digitalWrite(MOTORPINB, HIGH);
-      break;
-    case 2: // full speed extend
-      analogWrite(PWMPIN, 255);
-      digitalWrite(MOTORPINA, HIGH);
-      digitalWrite(MOTORPINB, LOW);
-      break;
-    case 3: // half speed retract
-      analogWrite(PWMPIN, 128);
-      digitalWrite(MOTORPINA, LOW);
-      digitalWrite(MOTORPINB, HIGH);
-      break;
-    case 4: // quarter speed retract
-      analogWrite(PWMPIN, 64);
-      digitalWrite(MOTORPINA, LOW);
-      digitalWrite(MOTORPINB, HIGH);
-      break;
-    case 5: // eighth speed retract
-      analogWrite(PWMPIN, 32);
-      digitalWrite(MOTORPINA, LOW);
-      digitalWrite(MOTORPINB, HIGH);
-      break;
-    default: // stop motor
-      digitalWrite(MOTORPINA, LOW);
-      digitalWrite(MOTORPINB, LOW);
-      break;
-  }
-  }
-*/
-
-
-
-
-
 
 
 
