@@ -12,7 +12,7 @@ import argparse, time,struct
 import socket
 import cv2
 import random
-
+#yay
 def getFrames():
     if __name__ == "__main__":
         parser = argparse.ArgumentParser( description = """Connect to the default camera and show the image stream.""")
