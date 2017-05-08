@@ -42,6 +42,10 @@
     - changing order of commands so 20ms is rate-controlled retract
     - changed rate-based retract constants to make the rate-controlled retract run faster
 
+   5/8/17
+    - adding a moment of extend that runs briefly when stop command is sent, to remove residual tension that
+      kept the frosting creeping out. Presently set for 100 milliseconds of travel before stopping; needs testing.
+
    Robert Zacharias, rz@rzach.me
    released by the author to the public domain
 */
@@ -153,14 +157,23 @@ void motorMode(byte in) { // based off of motor_pos_from_serial_command sketch
   static unsigned long lastMoveTime = 0;
   float pos = smoothedPos();
   int PWMsignal = constrain(map(abs(pos - posCommand), 0, 50, PWMMIN, PWMMAX), PWMMIN, PWMMAX);
+  static boolean wasJustRetracting = false;
 
   digitalWrite(PWMPIN, HIGH);
 
   switch (in) {
     case 0: // stop
+    {
+      if(wasJustRetracting){
+        analogWrite(PWMPIN, 32);
+        extend();
+        delay(100);
+      }
+      wasJustRetracting = false;
       off();
       posCommand = pos; // update for starting point of rate-based retract
       break;
+    }
     case 1: // rate-based retract
       //    5/1/17 took 4:20 to run full length of empty extruder @ travelWait 200 and retractVal 0.5
       //    5/5/17 took 0:53 to run full length of empty extruder @ travelWait 50 and retractVal 1
@@ -177,6 +190,8 @@ void motorMode(byte in) { // based off of motor_pos_from_serial_command sketch
           retract();
         }
         else off();
+
+        wasJustRetracting = true;
 
         if (debug) {
           Serial.print("posCommand = ");
