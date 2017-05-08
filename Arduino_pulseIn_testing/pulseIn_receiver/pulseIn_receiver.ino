@@ -45,6 +45,8 @@
    5/8/17
     - adding a moment of extend that runs briefly when stop command is sent, to remove residual tension that
       kept the frosting creeping out. Presently set for 100 milliseconds of travel before stopping; needs testing.
+    (later in the day)
+    - changing retract-upon-stop to be position-based instead of timing based since that's a better way to do it
 
    Robert Zacharias, rz@rzach.me
    released by the author to the public domain
@@ -163,23 +165,38 @@ void motorMode(byte in) { // based off of motor_pos_from_serial_command sketch
 
   switch (in) {
     case 0: // stop
-    {
-      if(wasJustRetracting){
-        analogWrite(PWMPIN, 32);
-        extend();
-        delay(100);
+      {
+
+        if (wasJustRetracting) {
+          posCommand = pos + 3;
+          wasJustRetracting = false;
+        }
+
+        if (abs(pos - posCommand) < 0.5) { // if good enough, stop and bail
+          off();
+          posCommand = pos; // update for starting point of rate-based retract
+          break;
+        }
+
+        // if too far in, extend
+        if (pos < posCommand) {
+          analogWrite(PWMPIN, PWMsignal);
+          extend();
+        }
+
+        // if too far out, retract
+        else if (pos > posCommand) {
+          analogWrite(PWMPIN, PWMsignal);
+          retract();
+        }
+        break;
       }
-      wasJustRetracting = false;
-      off();
-      posCommand = pos; // update for starting point of rate-based retract
-      break;
-    }
     case 1: // rate-based retract
       //    5/1/17 took 4:20 to run full length of empty extruder @ travelWait 200 and retractVal 0.5
       //    5/5/17 took 0:53 to run full length of empty extruder @ travelWait 50 and retractVal 1
       {
         int travelWait = 50;   // millisecond wait between steps
-        float retractVal = 0.5; // decrement amount
+        float retractVal = 2; // decrement amount
         if (millis() - lastMoveTime > travelWait) {
           posCommand -= retractVal;
           if (posCommand < MINPOS) posCommand = MINPOS;
