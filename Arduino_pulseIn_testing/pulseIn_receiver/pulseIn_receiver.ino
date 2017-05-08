@@ -35,6 +35,13 @@
     - main loop runs at 100 Hz
     - added jog buttons though they're not yet tested
 
+   5/4/17
+    - added position update to case 0, so that position-based stepping will know where it is when it begins
+
+   5/5/17
+    - changing order of commands so 20ms is rate-controlled retract
+    - changed rate-based retract constants to make the rate-controlled retract run faster
+
    Robert Zacharias, rz@rzach.me
    released by the author to the public domain
 */
@@ -95,19 +102,20 @@ void loop() {
   static bool wasJustJogging = false;
 
   while (digitalRead(JOGEXTEND) == LOW) {
-    analogWrite(PWMPIN, 64);
+    analogWrite(PWMPIN, 32);
     extend();
-    Serial.print("jog extend command to "); Serial.println(posCommand);
+    Serial.println("jog extend button pushed");
     wasJustJogging = true;
   }
   while (digitalRead(JOGRETRACT) == LOW) {
-    analogWrite(PWMPIN, 64);
+    analogWrite(PWMPIN, 32);
     retract();
-    Serial.print("jog retract command to "); Serial.println(posCommand);
+    Serial.println("jog retract button pushed");
     wasJustJogging = true;
   }
-  if(wasJustJogging){
-    off();
+  if (wasJustJogging) {
+    //    off();
+    mode = 0;
     wasJustJogging = false;
   }
 }
@@ -151,19 +159,13 @@ void motorMode(byte in) { // based off of motor_pos_from_serial_command sketch
   switch (in) {
     case 0: // stop
       off();
-      break;
-    case 1: // full speed retract
-      retract();
       posCommand = pos; // update for starting point of rate-based retract
       break;
-    case 2: // full speed extend
-      extend();
-      posCommand = pos; // update for starting point of rate-based retract
-      break;
-    case 3: // rate-based retract
+    case 1: // rate-based retract
       //    5/1/17 took 4:20 to run full length of empty extruder @ travelWait 200 and retractVal 0.5
+      //    5/5/17 took 0:53 to run full length of empty extruder @ travelWait 50 and retractVal 1
       {
-        int travelWait = 200;   // millisecond wait between steps
+        int travelWait = 50;   // millisecond wait between steps
         float retractVal = 0.5; // decrement amount
         if (millis() - lastMoveTime > travelWait) {
           posCommand -= retractVal;
@@ -191,6 +193,14 @@ void motorMode(byte in) { // based off of motor_pos_from_serial_command sketch
 
         break;
       }
+    case 2: // full speed extend
+      extend();
+      posCommand = pos; // update for starting point of rate-based retract
+      break;
+    case 3: // full speed retract
+      retract();
+      posCommand = pos; // update for starting point of rate-based retract
+      break;
     case 4: // quarter speed retract using PWM
       analogWrite(PWMPIN, 64);
       retract();
@@ -245,7 +255,7 @@ void serialEvent() {
       Serial.println("received serial command 'e' for extend");
     }
     else if (in == 'r') { // retract
-      mode = 1;
+      mode = 3;
       Serial.println("received serial command 'r' for retract");
     }
   }
