@@ -47,6 +47,14 @@
       kept the frosting creeping out. Presently set for 100 milliseconds of travel before stopping; needs testing.
     (later in the day)
     - changing retract-upon-stop to be position-based instead of timing based since that's a better way to do it
+    - tried to start adding indicator lights but it ain't happening tonight
+
+   5/9/17
+    - changed extend and retract buttons to different pins, and using external pullup resistors after
+      one of the built-in ones seemed to fail
+    - fixed incoming signal LEDs and broke them out into their own function
+    - jogExtend and jogRetract only moved the motor temporarily, then it would return to its starting position; fixed
+    Code as it appears here is the final implementation for the class demo on 5/9/17.
 
    Robert Zacharias, rz@rzach.me
    released by the author to the public domain
@@ -60,6 +68,8 @@ const byte READPIN = 2; // do not change this casually; it needs to be an interr
 int FUZZ = 1000; // number of microseconds to fudge on either side of pulse width result
 volatile unsigned long diff; // volatile because it will be affected by the ISR
 volatile byte mode = 0; // global to drive motorMode (will be set by ISR)
+volatile bool newRetractSignal = false; // for LED indicating received signal, set by ISR
+volatile bool newStopSignal = false; // for LED indicating received signal, set by ISR
 
 // target pulse width in microseconds of to-be-defined commands. Array length can be changed,
 // but check that motorMode reasonably matches
@@ -70,14 +80,18 @@ const int MOTORPINA = 4;
 const int MOTORPINB = 6;
 const int PWMPIN = 3;
 const int POSPIN = A0;
-const int JOGEXTEND = 10;
-const int JOGRETRACT = 8;
+const int JOGEXTEND = 7;
+const int JOGRETRACT = 10;
+const int RETRACTLED = A5;
+const int STOPLED = A2;
 
 const int PWMMIN = 32;
 const int PWMMAX = 128;
 const int MAXPOS = 850; // found empirically on this device; approx. 8" of extension
 const int MINPOS = 12;  // found empirically; fully retractede
 
+bool retractLight = false;
+bool stopLight = false;
 
 float posCommand = MAXPOS; // variable to store movement command; defaults to fully extended
 
@@ -92,9 +106,12 @@ void setup() {
   pinMode(MOTORPINB, OUTPUT);
   pinMode(PWMPIN, OUTPUT);
   digitalWrite(PWMPIN, HIGH);
-  pinMode(JOGEXTEND, INPUT_PULLUP);
-  pinMode(JOGRETRACT, INPUT_PULLUP);
+  pinMode(JOGEXTEND, INPUT);
+  pinMode(JOGRETRACT, INPUT);
   Serial.println(INITIALIZATIONMESSAGE);
+
+  pinMode(RETRACTLED, OUTPUT);
+  pinMode(STOPLED, OUTPUT);
 }
 
 void loop() {
@@ -105,17 +122,21 @@ void loop() {
     loopTime = millis();
   }
 
+  LEDindicators();
+
   static bool wasJustJogging = false;
 
   while (digitalRead(JOGEXTEND) == LOW) {
     analogWrite(PWMPIN, 32);
     extend();
+    posCommand = smoothedPos();
     Serial.println("jog extend button pushed");
     wasJustJogging = true;
   }
   while (digitalRead(JOGRETRACT) == LOW) {
     analogWrite(PWMPIN, 32);
     retract();
+    posCommand = smoothedPos();
     Serial.println("jog retract button pushed");
     wasJustJogging = true;
   }
@@ -140,6 +161,8 @@ void readPulse() {
       for (int i = 0; i < COMMANDLENGTH; i++) {
         if ( abs(diff - COMMAND[i]) < FUZZ ) {
           mode = i;
+          if (mode == 0) newStopSignal = true; // LED switching flag
+          else if (mode == 1) newRetractSignal = true; // LED switching flag
           break; // no need to continue loop if it's already found a motorMode
         }
       }
@@ -166,6 +189,8 @@ void motorMode(byte in) { // based off of motor_pos_from_serial_command sketch
   switch (in) {
     case 0: // stop
       {
+
+        stopLight = true;
 
         if (wasJustRetracting) {
           posCommand = pos + 3;
@@ -302,7 +327,31 @@ float smoothedPos() {
 }
 
 
+void LEDindicators() {
+  static long rLightTimer = 0;
+  static long sLightTimer = 0;
 
+  if (newStopSignal) {
+    sLightTimer = millis();
+    newStopSignal = false;
+  }
+
+  if (newRetractSignal) {
+    rLightTimer = millis();
+    newRetractSignal = false;
+  }
+
+  //  if(millis() - rLightTimer < 500) digitalWrite(RETRACTLED, HIGH);
+  //  else digitalWrite(RETRACTLED, LOW);
+  //
+  //  if(millis() - sLightTimer < 500) digitalWrite(STOPLED, HIGH);
+  //  else digitalWrite(STOPLED, LOW);
+
+  // how I think is clever to do it, but it means it does a digitalWrite every loop
+  // (though so does the above implementation! So I guess there's no difference?)
+  digitalWrite(RETRACTLED, (millis() - rLightTimer < 500));
+  digitalWrite(STOPLED, (millis() - sLightTimer < 500));
+}
 
 
 
